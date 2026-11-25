@@ -8,6 +8,7 @@
 #include <avr/pgmspace.h>       // read constant data from flash
 #include "GC9A01A_AVR.h"        // round display driver
 #include "bitmap.h"             // nav bar heading tape image
+#include "splash.h"             // boot splash logo
 
 // ---- Display ----
 #define SCR_WD 240
@@ -15,14 +16,29 @@
 #define TFT_CS  -1              // no CS pin: display CS tied to GND
 #define TFT_DC   9              // data/command select
 #define TFT_RST  10             // display reset
-#define AMBER 0xFD20            // RGB565 color for all HUD elements
+
+// ---- RGB565 UI Colors ----
+#define AMBER 0xFD20            // color for HUD elements + Boot splash 
+
+//#define DARK_RED 0x7800         
+//#define PURPLE 0x8010
+//#define MAGENTA 0xF81F
+//#define DARKGREEN 0x0b01 
+//#define TITANIUM 0x9CF3
+//#define SLATE_BLUE 0x6B90
 
 // Local sea-level pressure in hPa. Altitude is only accurate if this matches today's weather report.
 #define SEALEVELPRESSURE_HPA 1031.16
 
+
 // ---- Bitmap position (top-left corner, in pixels) ----
 #define NAV_X  69               // (240 - 102) / 2 = horizontally centered
 #define NAV_Y  10               // just inside the top of the round screen
+
+// ---- Boot splash ----
+#define SPLASH_X   ((SCR_WD - SPLASH_WIDTH)  / 2)   // centers boot bitmap
+#define SPLASH_Y   ((SCR_HT - SPLASH_HEIGHT) / 2)   // centers boot bitmap
+#define SPLASH_MS  2000                             // how long the splash stays up
 
 // ---- Heading labels ----
 #define TICK_STEP   10   // degrees between thick ticks
@@ -30,7 +46,7 @@
 #define DEMO_TURN   1    // 1 = fake a slow turn, 0 = static heading
 #define HEADING_MS  150  // how often the fake heading moves
 
-// Which thick ticks get a label: x position inside the bitmap, and ticks away from center
+// Heading Label locations based on Bitmap Tick marks |  X position inside the bitmap, and ticks away from center
 const uint8_t LABEL_TICK_X[3]    = { 10, 50, 91 };   // left, center (caret), right
 const int8_t  LABEL_TICK_OFFS[3] = { -2,  0,  2 };   // -2 ticks, center, +2 ticks
 
@@ -115,6 +131,10 @@ void setup()
   lcd.init(SCR_WD, SCR_HT);
   lcd.fillScreen(BLACK);
 
+  // Boot splash: draw the logo, then set up the sensor while it's on screen
+  lcd.drawBitmap(SPLASH_X, SPLASH_Y, splashBitmap, SPLASH_WIDTH, SPLASH_HEIGHT, AMBER);
+  unsigned long splashStart = millis();
+
   // Try both possible I2C addresses (set by the board's SDO pin)
   bmpOk = bmp.begin(0x76) || bmp.begin(0x77);
   if (bmpOk) {
@@ -127,6 +147,10 @@ void setup()
   } else {
     Serial.println("BMP280 not detected!");
   }
+
+  // Hold the splash for the rest of SPLASH_MS, then clear it for the HUD
+  while (millis() - splashStart < SPLASH_MS) {}
+  lcd.fillScreen(BLACK);
 
   // Static parts drawn once; only the numbers are redrawn in loop()
   lcd.drawBitmap(NAV_X, NAV_Y, bitmap, NAV_WIDTH, NAV_HEIGHT, AMBER);   // one color: 0 bits left untouched
